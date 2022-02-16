@@ -1,0 +1,37 @@
+set traceDisplay=long.
+free c:channel.
+
+free message:bitstring [private].
+
+type skey.
+type pkey.
+
+query attacker(message).
+
+fun pk(skey): pkey.
+
+fun aenc(bitstring, pkey) : bitstring.
+
+reduc forall m: bitstring, k : skey ; adec(aenc(m, pk(k)), k) = m.
+
+
+let ClientA(pkA:pkey,skA:skey) =
+    in(c, pkX:pkey);
+    let x = aenc(message, pkX) in
+	out(c, x);
+    in(c, y:bitstring);
+    let d = adec(y, skA) in 0.
+	
+let ClientB(pkB:pkey, skB:skey) =
+    in(c, pkX:pkey);
+    in(c, x:bitstring);
+    let enc = aenc(x, pkX) in
+    out(c, enc).
+
+process
+    new skA:skey;
+    new skB:skey;
+    let pkA = pk(skA) in out(c,pkA);
+    let pkB = pk(skB) in out(c,pkB);
+    ( (!ClientA(pkA, skA)) | (!ClientB(pkB, skB)) )
+    
