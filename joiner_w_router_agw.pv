@@ -1,0 +1,62 @@
+free c_jr:channel.
+free jr_j:channel.
+
+free cookie:bitstring[private].
+type skey.
+type pkey.
+
+
+fun pk(skey): pkey.
+
+fun aenc(bitstring, pkey) : bitstring.
+
+reduc forall m: bitstring, k : skey ; adec(aenc(m, pk(k)), k) = m.
+
+type id.
+
+type hello.
+type connect_msg.
+type cert.
+type ack.
+
+fun gencert(skey, pkey) : cert.
+fun genconnect_msg(): connect_msg.
+fun genhello(): hello.
+fun genack(): ack.
+
+fun genCookie(id): bitstring.
+
+let Joiner(skJ:skey) =
+    let pkJ = pk(skJ) in 
+    let connect_req = genconnect_msg() in
+    out(jr_j, connect_req);
+    in(jr_j, ack:ack);
+    let hello = genhello() in
+    out(jr_j, hello);
+    in(jr_j, server_hello:hello);
+    in(jr_j, certificate:cert);
+    in(jr_j, server_hello_done:hello);
+    out(jr_j, pkJ);
+    in(jr_j, pkJR:pkey).
+
+let JoinerRouter(skJR:skey) =
+    let pkJR = pk(skJR) in 
+    in(jr_j, hello:connect_msg);
+    let ack = genack() in
+    out(jr_j, ack);
+    in(jr_j, client_hello:hello);
+    let server_hello = genhello() in
+    out(jr_j, server_hello);
+    let cert = gencert(skJR, pkJR) in
+    out(jr_j, cert);
+    let server_hello_done = genhello() in
+    out(jr_j, server_hello_done);
+    in(jr_j, pkJ:pkey);
+    out(jr_j, pkJR);
+    0.
+
+
+process
+    new skJ:skey;
+    new skJR:skey;
+    ((!Joiner(skJ)) | (!JoinerRouter(skJR)))
