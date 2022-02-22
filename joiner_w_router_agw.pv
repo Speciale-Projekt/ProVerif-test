@@ -1,9 +1,11 @@
-free c_jr:channel.
-free jr_j:channel.
+free c:channel.
 
 free cookie:bitstring[private].
 type skey.
 type pkey.
+
+free connect_req:bitstring.
+free hello:bitstring[private].
 
 
 fun pk(skey): pkey.
@@ -12,51 +14,60 @@ fun aenc(bitstring, pkey) : bitstring.
 
 reduc forall m: bitstring, k : skey ; adec(aenc(m, pk(k)), k) = m.
 
-type id.
-
-type hello.
 type connect_msg.
 type cert.
 type ack.
 
-fun gencert(skey, pkey) : cert.
+fun genHello() : hello.
+fun gencert() : cert.
 fun genconnect_msg(): connect_msg.
-fun genhello(): hello.
 fun genack(): ack.
 
-fun genCookie(id): bitstring.
+fun genCookie(): bitstring.
 
 let Joiner(skJ:skey) =
     let pkJ = pk(skJ) in 
-    let connect_req = genconnect_msg() in
-    out(jr_j, connect_req);
-    in(jr_j, ack:ack);
-    let hello = genhello() in
-    out(jr_j, hello);
-    in(jr_j, server_hello:hello);
-    in(jr_j, certificate:cert);
-    in(jr_j, server_hello_done:hello);
-    out(jr_j, pkJ);
-    in(jr_j, pkJR:pkey).
+    let hello = genHello() in
+    out(c, (connect_req, pkJ));
+    in(c, (=ack, pkC));
+    let cookie = genCookie() in
+    let enc_cookie = aenc(cookie, pkC) in
+    out(c, (hello, enc_cookie));
+    in (c, (=hello, cok));
+    if adec(cok, skJ) = cookie then
+        (*We got the correct cookie from the commissioner. Lets begin the joining.*)
+        let auth = genAuth() in
+        let enc_auth = aenc(auth, pkJ) in
+        out(c, (hello, enc_auth));
+        in (c, (=hello, aok));
+        out (c, hello);
+        in (c, (=hello, application_data));
+        in (c, (=hello,join_ent));
+        out(c, (hello, join_ent));
+        out(c, (hello, close));
+        in(c, (=hello, close));
+    else
+        (*We got the wrong cookie from the commissioner. We should close the connection.*)
+        out(c, (hello, close));
+    
 
-let JoinerRouter(skJR:skey) =
-    let pkJR = pk(skJR) in 
-    in(jr_j, hello:connect_msg);
+let Commissioner(skC:skey) =
+    let pkC = pk(skC) in 
+    in(c, (connect_req:bitstring, pkJ:pke));
     let ack = genack() in
-    out(jr_j, ack);
-    in(jr_j, client_hello:hello);
-    let server_hello = genhello() in
-    out(jr_j, server_hello);
-    let cert = gencert(skJR, pkJR) in
-    out(jr_j, cert);
-    let server_hello_done = genhello() in
-    out(jr_j, server_hello_done);
-    in(jr_j, pkJ:pkey);
-    out(jr_j, pkJR);
+    out(c, (ack, pkC));
+    in(c, (=hello, cok));
+    let cookie = adec(cok, skC) in
+    let enc_cookie = aenc(cookie, pkJ) in
+    out(c, (hello, enc_cookie));
+    let cert = gencert() in
+    out(c, cert);
+    in(c, pkJ:pkey);
+    out(c, pkJR);
     0.
 
 
 process
     new skJ:skey;
-    new skJR:skey;
-    ((!Joiner(skJ)) | (!JoinerRouter(skJR)))
+    new skC:skey;
+    ((!Joiner(skJ)) | (!Commissioner(skC)))
